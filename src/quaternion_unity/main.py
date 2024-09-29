@@ -1,12 +1,23 @@
 from typing_extensions import Self
 from typing import TypeVar
 from typing import Generic
-
+from types import ModuleType
+from typing import Any
+import importlib.util
+    
 ArrayLike = TypeVar("ArrayLike")
 
+def _get_lib(*args: Any) -> ModuleType:
+    libs = [a.__class__.__module__.split(".")[0] for a in args]
+    if any(lib != libs[0] for lib in libs):
+        raise ValueError("args must be of the same library, "
+                         f"but got {', '.join(libs)}")
+    return importlib.import_module(libs[0])
+    
 class Quaternion(Generic[ArrayLike]):
     """Quaternion class."""
     _AXIS = 0
+    np: ModuleType
 
     def __init__(
         self,
@@ -65,14 +76,12 @@ class Quaternion(Generic[ArrayLike]):
         https://www.mesw.co.jp/business/report/pdf/mss_18_07.pdf
 
         """
-        libs = [a.__class__.__module__.split(".")[0] for a in (x, y, z, w)]
-        if any(lib != libs[0] for lib in libs):
-            raise ValueError("All components must be of the same library.")
+        self.np = _get_lib(x, y, z, w)
         self.x = x
         self.y = y
         self.z = z
         self.w = w
-        self.q = self.lib.stack([self.x, self.y, self.z, self.w], axis=self._AXIS)
+        self.q = self.np.stack([self.x, self.y, self.z, self.w], axis=self._AXIS)
         self.is_product_antimorphic = is_product_antimorphic
         self.eq_as_rotation = eq_as_rotation
 
@@ -112,15 +121,15 @@ class Quaternion(Generic[ArrayLike]):
 
     @property
     def norm(self) -> ArrayLike:
-        return self.lib.linalg.norm(self.q, axis=self._AXIS)
+        return self.np.linalg.norm(self.q, axis=self._AXIS)
 
     @property
     def normalized(self) -> Self:
-        return self / self.norm
+        return self.from_array(self.q / self.norm)
 
     @property
     def norm_xyz(self) -> ArrayLike:
-        return self.lib.linalg.norm(self.xyz, axis=self._AXIS)
+        return self.np.linalg.norm(self.xyz, axis=self._AXIS)
 
     @property
     def normalized_xyz(self) -> ArrayLike:
@@ -140,33 +149,38 @@ class Quaternion(Generic[ArrayLike]):
 
     def angle(self, other: "Quaternion | None" = None) -> float:
         if other is None:
-            return 2 * self.lib.arccos(self.w)
-        return self.lib.arccos(self.dot(other))
+            return 2 * self.np.arccos(self.w)
+        return self.np.arccos(self.dot(other))
     
     def axis(self) -> ArrayLike:
         angle = self.angle()
-        return self.q[:3] / self.lib.sin(self.angle / 2)
+        return self.q[:3] / self.np.sin(self.angle / 2)
 
     def to_angle_axis(self) -> tuple[ArrayLike, ArrayLike]:
         angle = self.angle()
-        axis = self.q[:3] / self.lib.sin(angle / 2)
+        axis = self.q[:3] / self.np.sin(angle / 2)
         return angle, axis
     
+    @classmethod
     def from_angle_axis(cls, angle: ArrayLike, axis: ArrayLike) -> Self:
+        lib = _get_lib(angle, axis)
         anglehalf = angle / 2
-        return cls.from_array_xyz(xyz=axis * self.lib.sin(anglehalf), w=self.lib.cos(anglehalf))
+        return cls.from_array_xyz(xyz=axis * lib.sin(anglehalf), w=lib.cos(anglehalf))
 
     def dot(self, other: "Quaternion") -> ArrayLike:
-        return self.lib.sum(self.q * other.q, axis=self._AXIS)
+        return self.np.sum(self.q * other.q, axis=self._AXIS)
 
     @classmethod
     def from_euler(
         cls, x: ArrayLike, y: ArrayLike, z: ArrayLike, *, convention: str
     ) -> Self:
-        pass
+        raise NotImplementedError
+    
+    def to_euler(self, *, convention: str) -> tuple[ArrayLike, ArrayLike, ArrayLike]:
+        raise NotImplementedError
 
     def inverse(self) -> Self:
-        return self.conjugate / self.lib.sum(self.q**2)
+        return self.conjugate / self.np.sum(self.q**2)
 
     @property
     def conjugate(self) -> Self:
@@ -184,10 +198,10 @@ class Quaternion(Generic[ArrayLike]):
         return self.__add__(-other)
 
     def __neg__(self) -> Self:
-        return self.__class__(x=-self.x, y=-self.y, z=-self.z, w=-self.w)
+        return self.__class__.from_array(-self.q)
 
     def _left_mul_matrix_hamilton(self) -> ArrayLike:
-        return self.lib.array(
+        return self.np.array(
             [
                 [self.w, -self.z, self.y, self.x],
                 [self.z, self.w, -self.x, self.y],
@@ -197,7 +211,7 @@ class Quaternion(Generic[ArrayLike]):
         )
 
     def _right_mul_matrix_hamilton(self) -> ArrayLike:
-        return self.lib.array(
+        return self.np.array(
             [
                 [self.w, -self.z, self.y, self.x],
                 [self.z, self.w, -self.x, self.y],
@@ -218,7 +232,7 @@ class Quaternion(Generic[ArrayLike]):
 
     def __mul__(self, other: "Quaternion") -> Self:
         return self.__class__.from_array(
-            self.lib.tensordot(self.left_mul_matrix(), other.q, axes=(1, self._AXIS))
+            self.np.tensordot(self.left_mul_matrix(), other.q, axes=(1, self._AXIS))
             # self.lib.einsum("ij...,j...->i...", self.left_mul_matrix(), other.q)
         )
 
@@ -228,23 +242,23 @@ class Quaternion(Generic[ArrayLike]):
     def exp(self) -> Self:
         norm_xyz = self.norm_xyz
         normalized_xyz = self.normalized_xyz
-        return self.lib.exp(self.w) * self.__class__.from_array_xyz(
-            xyz=normalized_xyz * self.lib.sin(norm_xyz), w=self.lib.cos(norm_xyz)
+        return self.np.exp(self.w) * self.__class__.from_array_xyz(
+            xyz=normalized_xyz * self.np.sin(norm_xyz), w=self.np.cos(norm_xyz)
         )
 
     def log(self) -> Self:
         norm_xyz = self.norm_xyz
         normalized_xyz = self.normalized_xyz
-        theta = self.lib.arctan2(norm_xyz, self.w)
+        theta = self.np.arctan2(norm_xyz, self.w)
         return self.__class__.from_array_xyz(
-            xyz=normalized_xyz * theta, w=self.lib.log(self.norm)
+            xyz=normalized_xyz * theta, w=self.np.log(self.norm)
         )
 
     def __pow__(self, other: float) -> Self:
         normalized_xyz = self.normalized_xyz
-        theta = self.lib.arccos(self.w)
+        theta = self.np.arccos(self.w)
         return self.__class__.from_array_xyz(
-            xyz=normalized_xyz * self.lib.sin(other * theta), w=self.lib.cos(other * theta)
+            xyz=normalized_xyz * self.np.sin(other * theta), w=self.np.cos(other * theta)
         )
 
     def to_rotation_matrix(self, active: bool, cut: bool = True) -> ArrayLike:
@@ -268,12 +282,12 @@ class Quaternion(Generic[ArrayLike]):
 
         """
         if active:
-            res = self.lib.tensordot(self.left_mul_matrix(), self.right_mul_matrix(), axes=(1, 0))
+            res = self.np.tensordot(self.left_mul_matrix(), self.right_mul_matrix(), axes=(1, 0))
             # res = self.lib.einsum(
             #     "ij...,j...->i...", self.left_mul_matrix(), self.right_mul_matrix()
             # )
         else:
-            res = self.lib.tensordot(self.right_mul_matrix(), self.left_mul_matrix(), axes=(1, 0))
+            res = self.np.tensordot(self.right_mul_matrix(), self.left_mul_matrix(), axes=(1, 0))
             # res = self.lib.einsum(
             #     "ij...,j...->i...", self.right_mul_matrix(), self.left_mul_matrix()
             # )
@@ -284,7 +298,7 @@ class Quaternion(Generic[ArrayLike]):
             return res
         
     def rotate(self, vector: ArrayLike, active: bool, axis: int = 0) -> ArrayLike:
-        return self.lib.tensordot(self.to_rotation_matrix(active), vector, axes=(1, axis)).moveaxis(0, axis)
+        return self.np.tensordot(self.to_rotation_matrix(active), vector, axes=(1, axis)).moveaxis(0, axis)
 
     @classmethod
     def rotation_derivative_matrix(cls, omega: ArrayLike, active: bool) -> ArrayLike:
@@ -339,7 +353,7 @@ class Quaternion(Generic[ArrayLike]):
 
         """
         return self.__class__.from_array(
-            self.lib.tensordot(
+            self.np.tensordot(
                 self.rotation_derivative_matrix(omega.moveaxis(axis, 0), active),
                 self.q,
                 (1, self._AXIS),
@@ -348,26 +362,36 @@ class Quaternion(Generic[ArrayLike]):
 
     def lerp(self, other: "Quaternion", t: ArrayLike, clamped: bool = False) -> Self:
         if clamped:
-            t = self.lib.clip(t, 0, 1)
+            t = self.np.clip(t, 0, 1)
         return self * (1 - t) + other * t
     
     def slerp(self, other: "Quaternion", t: ArrayLike, clamped: bool = False) -> Self:
         if clamped:
-            t = self.lib.clip(t, 0, 1)
+            t = self.np.clip(t, 0, 1)
         angle = self.angle(other)
-        anglesin = self.lib.sin(angle)
-        tself = self.lib.sin((1 - t) * angle) / anglesin
-        tother = self.lib.sin(t * angle) / anglesin
+        anglesin = self.np.sin(angle)
+        tself = self.np.sin((1 - t) * angle) / anglesin
+        tother = self.np.sin(t * angle) / anglesin
         return self * tself + other * tother
     
     @classmethod
-    def look_rotation(cls, forward: ArrayLike, upwards: ArrayLike) -> Self:
-        forward = self.lib.array(forward)
-        upwards = self.lib.array(upwards)
-        forward = forward / self.lib.linalg.norm(forward)
-        right = self.lib.cross(upwards, forward)
-        upwards = self.lib.cross(forward, right)
-        return cls.to_rotation_matrix(forward, upwards, right)
+    def from_to_rotation(cls, from_direction: ArrayLike, to_direction: ArrayLike, *, axis=0) -> Self:
+        lib = _get_lib(from_direction, to_direction)
+        from_direction = from_direction / lib.linalg.norm(from_direction, axis=axis)
+        to_direction = to_direction / lib.linalg.norm(to_direction, axis=axis)
+        axis = lib.cross(from_direction, to_direction, axis=axis)
+        angle = lib.arccos(lib.dot(from_direction, to_direction, axis=axis))
+        return cls.from_angle_axis(angle, axis)
+    
+    @classmethod
+    def look_rotation(cls, forward: ArrayLike, upwards: ArrayLike, *, axis=0) -> Self:
+        lib = _get_lib(forward, upwards)
+        dim = forward.ndim
+        new_shape = lib.ones(dim, dtype=int)
+        new_shape[axis] = -1
+        rot_forward = cls.from_to_rotation(lib.array([0, 0, 1]).reshape(new_shape), forward)
+        rot_upwards = cls.from_to_rotation(rot_forward.rotate(lib.array([0, 1, 0]), active=True).reshape(new_shape), upwards)
+        return rot_upwards * rot_forward
 
     def allclose(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
         return self._close("allclose", other, *args, as_rotation=as_rotation, **kwargs)
@@ -393,10 +417,10 @@ class Quaternion(Generic[ArrayLike]):
         if as_rotation is None:
             as_rotation = self.eq_as_rotation
         if as_rotation:
-            return self.lib.any(
+            return self.np.any(
                 [
-                    getattr(self.lib, name)(self.q, other.q, *args, **kwargs),
-                    getattr(self.lib, name)(self.q, -other.q, *args, **kwargs),
+                    getattr(self.np, name)(self.q, other.q, *args, **kwargs),
+                    getattr(self.np, name)(self.q, -other.q, *args, **kwargs),
                 ]
             )
-        return getattr(self.lib, name)(self.q, other.q, *args, **kwargs)
+        return getattr(self.np, name)(self.q, other.q, *args, **kwargs)
