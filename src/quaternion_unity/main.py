@@ -242,7 +242,7 @@ class Quaternion:
             xyz=normalized_xyz * np.sin(other * theta), w=np.cos(other * theta)
         )
 
-    def rotation_matrix(self, active: bool, cut: bool = True) -> ArrayLike:
+    def to_rotation_matrix(self, active: bool, cut: bool = True) -> ArrayLike:
         """
         The rotation matrix corresponding to the quaternion.
 
@@ -277,6 +277,9 @@ class Quaternion:
             return res[:3, :3]
         else:
             return res
+        
+    def rotate(self, vector: ArrayLike, active: bool, axis: int = 0) -> ArrayLike:
+        return np.tensordot(self.to_rotation_matrix(active), vector, axes=(1, axis)).moveaxis(0, axis)
 
     @classmethod
     def rotation_derivative_matrix(cls, omega: ArrayLike, active: bool) -> ArrayLike:
@@ -315,7 +318,7 @@ class Quaternion:
             ]
         )
 
-    def rotation_derivative(self, omega: ArrayLike, active: bool) -> Quaternion:
+    def rotation_derivative(self, omega: ArrayLike, active: bool, *, axis: int = 0) -> Self:
         """
         The derivative of the rotation matrix corresponding to the quaternion.
 
@@ -332,7 +335,7 @@ class Quaternion:
         """
         return self.__class__.from_array(
             np.tensordot(
-                self.rotation_derivative_matrix(omega, active),
+                self.rotation_derivative_matrix(omega.moveaxis(axis, 0), active),
                 self.q,
                 (1, self._AXIS),
             )
@@ -359,13 +362,22 @@ class Quaternion:
         forward = forward / np.linalg.norm(forward)
         right = np.cross(upwards, forward)
         upwards = np.cross(forward, right)
-        return cls.rotation_matrix(forward, upwards, right)
+        return cls.to_rotation_matrix(forward, upwards, right)
 
     def allclose(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
         return self._close("allclose", other, *args, as_rotation=as_rotation, **kwargs)
     
     def isclose(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
         return self._close("isclose", other, *args, as_rotation=as_rotation, **kwargs)
+    
+    def equal(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
+        return self._close("equal", other, *args, as_rotation=as_rotation, **kwargs)
+    
+    def array_equal(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
+        return self._close("array_equal", other, *args, as_rotation=as_rotation, **kwargs)
+    
+    def __ne__(self, value: object) -> bool:
+        return not self.__eq__(value)
     
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Quaternion):
