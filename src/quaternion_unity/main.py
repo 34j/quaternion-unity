@@ -147,7 +147,7 @@ class Quaternion(Generic[ArrayLike]):
         else:
             raise IndexError("Index out of range")
 
-    def angle(self, other: "Quaternion | None" = None) -> float:
+    def angle(self, other: "Quaternion | None" = None) -> ArrayLike:
         if other is None:
             return 2 * self.np.arccos(self.w)
         return self.np.arccos(self.dot(other))
@@ -301,7 +301,7 @@ class Quaternion(Generic[ArrayLike]):
         return self.np.tensordot(self.to_rotation_matrix(active), vector, axes=(1, axis)).moveaxis(0, axis)
 
     @classmethod
-    def rotation_derivative_matrix(cls, omega: ArrayLike, active: bool) -> ArrayLike:
+    def rotation_derivative_matrix(cls, omega: ArrayLike, active: bool, *, axis: int = 0) -> ArrayLike:
         """
         The derivative of the rotation matrix corresponding to the quaternion.
 
@@ -318,22 +318,26 @@ class Quaternion(Generic[ArrayLike]):
         """
         if omega.shape[0] != 3:
             raise ValueError("The angular velocity vector must have 3 components.")
-        zero = self.lib.zeros_like(omega[0])
+        lib = _get_lib(omega)
+        zero = lib.zeros_like(omega[0])
+        o0 = omega.take(0, axis=0)
+        o1 = omega.take(1, axis=0)
+        o2 = omega.take(2, axis=0)
         if active:
-            return self.lib.array(
+            return lib.array(
                 [
-                    [zero, -omega[0], -omega[1], -omega[2]],
-                    [omega[0], zero, omega[2], -omega[1]],
-                    [omega[1], -omega[2], zero, omega[0]],
-                    [omega[2], omega[1], -omega[0], zero],
+                    [zero, -o0, -o1, -o2],
+                    [o0, zero, o2, -o1],
+                    [o1, -o2, zero, o0],
+                    [o2, o1, -o0, zero],
                 ]
             )
-        return self.lib.array(
+        return lib.array(
             [
-                [zero, -omega[0], -omega[1], -omega[2]],
-                [omega[0], zero, -omega[2], omega[1]],
-                [omega[1], omega[2], zero, -omega[0]],
-                [omega[2], -omega[1], omega[0], zero],
+                [zero, -o0, -o1, -o2],
+                [o0, zero, -o2, o1],
+                [o1, o2, zero, -o0],
+                [o2, -o1, o0, zero],
             ]
         )
 
@@ -354,7 +358,7 @@ class Quaternion(Generic[ArrayLike]):
         """
         return self.__class__.from_array(
             self.np.tensordot(
-                self.rotation_derivative_matrix(omega.moveaxis(axis, 0), active),
+                self.rotation_derivative_matrix(omega, active, axis=axis),
                 self.q,
                 (1, self._AXIS),
             )
@@ -405,10 +409,10 @@ class Quaternion(Generic[ArrayLike]):
     def array_equal(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
         return self._close("array_equal", other, *args, as_rotation=as_rotation, **kwargs)
     
-    def __ne__(self, value: object) -> bool:
+    def __ne__(self, value: object) -> ArrayLike:
         return not self.__eq__(value)
     
-    def __eq__(self, value: object) -> bool:
+    def __eq__(self, value: object) -> ArrayLike:
         if not isinstance(value, Quaternion):
             return False
         return self._close("equal", value, self.eq_as_rotation)
