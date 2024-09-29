@@ -13,7 +13,8 @@ class Quaternion:
         y: ArrayLike,
         z: ArrayLike,
         w: ArrayLike,
-        is_product_antimorphic: bool = True
+        is_product_antimorphic: bool = True,
+        eq_as_rotation: bool = True
     ) -> None:
         """
         Quaternion class.
@@ -34,13 +35,32 @@ class Quaternion:
 
             JPL convention is often used in aerospace and robotics.
             Hamilton convention is more common in most other fields.
+        eq_rotation : bool
+            
+            If True, the quaternion 
+            
 
         Following Unity's convention, W component is the last in the internal array.
+        
+        Breaking change from Unity's convention:
+        - CamelCase to snake_case
+        - Static methods are now class methods
+        - removed Set...() and To...() public methods
+        - removed this[int]
+        - AngleAxis is now from_angle_axis()
+        - identity is not class property but class function,
+          as class properties are no longer supported in Python
+        - lerp() and slerp() does not clamp by default
+        - removed RotateTowards() as it is not a common operation,
+          use self.lerp(other, np.min(maxDegreesDelta / self.angle(other), 1)) instead
+        
 
         References
         ----------
         Why and How to Avoid the Flipped Quaternion Multiplication
         https://arxiv.org/abs/1801.07478
+        Handy Note for Quaternions
+        https://www.mesw.co.jp/business/report/pdf/mss_18_07.pdf
 
         """
         self.x = np.array(x)
@@ -49,6 +69,7 @@ class Quaternion:
         self.w = np.array(w)
         self.q = np.stack([self.x, self.y, self.z, self.w], axis=self._AXIS)
         self.is_product_antimorphic = is_product_antimorphic
+        self.eq_as_rotation = eq_as_rotation
 
     @classmethod
     def from_array(cls, q: ArrayLike, w_last: bool = True) -> Self:
@@ -112,16 +133,26 @@ class Quaternion:
         else:
             raise IndexError("Index out of range")
 
-    def angle(self, other: "Quaternion") -> float:
-        pass
+    def angle(self, other: "Quaternion" | None = None) -> float:
+        if other is None:
+            return 2 * np.arccos(self.w)
+        return np.arccos(self.dot(other))
+    
+    def axis(self) -> ArrayLike:
+        angle = self.angle()
+        return self.q[:3] / np.sin(self.angle / 2)
 
     def to_angle_axis(self) -> tuple[ArrayLike, ArrayLike]:
-        angle = 2 * np.arccos(self.w)
+        angle = self.angle()
         axis = self.q[:3] / np.sin(angle / 2)
         return angle, axis
+    
+    def from_angle_axis(cls, angle: ArrayLike, axis: ArrayLike) -> Self:
+        anglehalf = angle / 2
+        return cls.from_array_xyz(xyz=axis * np.sin(anglehalf), w=np.cos(anglehalf))
 
     def dot(self, other: "Quaternion") -> ArrayLike:
-        return np.sum(self.q * other.q, axis=0)
+        return np.sum(self.q * other.q, axis=self._AXIS)
 
     @classmethod
     def from_euler(
@@ -182,7 +213,8 @@ class Quaternion:
 
     def __mul__(self, other: "Quaternion") -> Self:
         return self.__class__.from_array(
-            np.einsum("ij...,j...->i...", self.left_mul_matrix(), other.q)
+            np.tensordot(self.left_mul_matrix(), other.q, axes=(1, self._AXIS))
+            # np.einsum("ij...,j...->i...", self.left_mul_matrix(), other.q)
         )
 
     def __truediv__(self, other: "Quaternion") -> Self:
@@ -196,7 +228,6 @@ class Quaternion:
         )
 
     def log(self) -> Self:
-        norm = self.norm
         norm_xyz = self.norm_xyz
         normalized_xyz = self.normalized_xyz
         theta = np.arctan2(norm_xyz, self.w)
@@ -232,13 +263,15 @@ class Quaternion:
 
         """
         if active:
-            res = np.einsum(
-                "ij...,j...->i...", self.left_mul_matrix(), self.right_mul_matrix()
-            )
+            res = np.tensordot(self.left_mul_matrix(), self.right_mul_matrix(), axes=(1, 0))
+            # res = np.einsum(
+            #     "ij...,j...->i...", self.left_mul_matrix(), self.right_mul_matrix()
+            # )
         else:
-            res = np.einsum(
-                "ij...,j...->i...", self.right_mul_matrix(), self.left_mul_matrix()
-            )
+            res = np.tensordot(self.right_mul_matrix(), self.left_mul_matrix(), axes=(1, 0))
+            # res = np.einsum(
+            #     "ij...,j...->i...", self.right_mul_matrix(), self.left_mul_matrix()
+            # )
 
         if cut:
             return res[:3, :3]
@@ -298,10 +331,10 @@ class Quaternion:
 
         """
         return self.__class__.from_array(
-            np.einsum(
-                "ij...,j...->i...",
-                self.left_mul_matrix(),
+            np.tensordot(
                 self.rotation_derivative_matrix(omega, active),
+                self.q,
+                (1, self._AXIS),
             )
         )
 
@@ -309,3 +342,44 @@ class Quaternion:
         if clamped:
             t = np.clip(t, 0, 1)
         return self * (1 - t) + other * t
+    
+    def slerp(self, other: "Quaternion", t: float, clamped: bool = False) -> Self:
+        if clamped:
+            t = np.clip(t, 0, 1)
+        angle = self.angle(other)
+        anglesin = np.sin(angle)
+        tself = np.sin((1 - t) * angle) / anglesin
+        tother = np.sin(t * angle) / anglesin
+        return self * tself + other * tother
+    
+    @classmethod
+    def look_rotation(cls, forward: ArrayLike, upwards: ArrayLike) -> Self:
+        forward = np.array(forward)
+        upwards = np.array(upwards)
+        forward = forward / np.linalg.norm(forward)
+        right = np.cross(upwards, forward)
+        upwards = np.cross(forward, right)
+        return cls.rotation_matrix(forward, upwards, right)
+
+    def allclose(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
+        return self._close("allclose", other, *args, as_rotation=as_rotation, **kwargs)
+    
+    def isclose(self, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
+        return self._close("isclose", other, *args, as_rotation=as_rotation, **kwargs)
+    
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Quaternion):
+            return False
+        return self._close("equal", value, self.eq_as_rotation)
+    
+    def _close(self, name: str, other: "Quaternion", *args, as_rotation: bool | None = None, **kwargs) -> ArrayLike:
+        if as_rotation is None:
+            as_rotation = self.eq_as_rotation
+        if as_rotation:
+            return np.any(
+                [
+                    getattr(np, name)(self.q, other.q, *args, **kwargs),
+                    getattr(np, name)(self.q, -other.q, *args, **kwargs),
+                ]
+            )
+        return getattr(np, name)(self.q, other.q, *args, **kwargs)
