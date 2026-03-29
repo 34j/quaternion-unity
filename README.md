@@ -46,6 +46,33 @@ Install this via pip (or your favourite package manager):
 
 `pip install quaternion-unity`
 
+## Alternatives
+
+- [clemense/quaternion\-conventions: An overview of different quaternion implementations and their chosen order: x\-y\-z\-w or w\-x\-y\-z?](https://github.com/clemense/quaternion-conventions)
+- Specific to Quarternion/Rotation
+  - [moble/quaternion: Add built-in support for quaternions to numpy](https://github.com/moble/quaternion): slerp, etc. is not implemented, operations are implemented as functions, not methods
+  - [RoMa: A lightweight library to deal with 3D rotations in PyTorch. — RoMa latest documentation](https://naver.github.io/roma/#api-documentation)
+  - [Quaternions — Spatial Maths package documentation](https://bdaiinstitute.github.io/spatialmath-python/func_quat.html#module-spatialmath.base.quaternions)
+  - [the-guild-of-calamitous-intent/squaternion: Simple quaternion math library](https://github.com/the-guild-of-calamitous-intent/squaternion)
+  - [konbraphat51/UnityQuaternionPy: UnityEngine.Quaternion from scratch in Python3](https://github.com/konbraphat51/UnityQuaternionPy): unity-like interface but not numpy-compatible
+  - [translunar/pyquat: Fast unit quaternion code for Python written in C](https://github.com/translunar/pyquat): C implementation
+  - [PhilJd/tf-quaternion: An implementation of quaternions for and written in tensorflow. Fully differentiable.](https://github.com/PhilJd/tf-quaternion): not actively maintained, differentiable
+  - [ispamm/hTorch: Repository dedicated to Quaternion Neural Networks](https://github.com/ispamm/hTorch): not actively maintained, neural network
+  - [satellogic/quaternions](https://github.com/satellogic/quaternions): not actively maintained
+  - [quaternions/quaternions/quaternion.py at master · mjsobrep/quaternions](https://github.com/mjsobrep/quaternions/blob/master/quaternions/quaternion.py): not actively maintained
+  - [KieranWynn/pyquaternion: A fully featured, pythonic library for representing and using quaternions](https://github.com/KieranWynn/pyquaternion): not actively maintained
+  - [tinyquaternion/tinyquaternion/tinyQuaternion.py at master · rezaahmadzadeh/tinyquaternion](https://github.com/rezaahmadzadeh/tinyquaternion/blob/master/tinyquaternion/tinyQuaternion.py): not actively maintained
+- General scientific computing
+  - [Quaternion — Pyrr 0.10.3 documentation](https://pyrr.readthedocs.io/en/latest/api_quaternion.html)
+  - [pytorch3d.transforms.rotation_conversions — PyTorch3D documentation](https://pytorch3d.readthedocs.io/en/latest/_modules/pytorch3d/transforms/rotation_conversions.html#standardize_quaternion): no quaternion class, only a few functions
+  - [pytransform3d/pytransform3d/rotations/\_quaternion_operations.py at c45e817c4a7960108afe9f5259542c8376c0e89a · dfki-ric/pytransform3d](https://github.com/dfki-ric/pytransform3d/blob/c45e817c4a7960108afe9f5259542c8376c0e89a/pytransform3d/rotations/_quaternion_operations.py#L22): only a few functions
+  - [Spatial Transformations (scipy.spatial.transform) — SciPy v1.14.1 Manual](https://docs.scipy.org/doc/scipy/reference/spatial.transform.html#): only a few functions
+  - [quaternions — transforms3d 0.4 documentation](https://matthew-brett.github.io/transforms3d/reference/transforms3d.quaternions.html)
+- Robotics
+  - [Quaternions — autolab_core 1.1.0 documentation](https://berkeleyautomation.github.io/autolab_core/api/dual_quaternion.html#autolab_core.DualQuaternion.qr): only 5 methods
+  - [PyBullet Quickstart Guide - Google Docs](https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#heading=h.2ye70wns7io3): documentation is not clear
+  - [dm_robotics/py/transformations at main · google-deepmind/dm_robotics](https://github.com/google-deepmind/dm_robotics/tree/main/py/transformations)
+
 ## Contributors ✨
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
