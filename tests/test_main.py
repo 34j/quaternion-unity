@@ -1,4 +1,4 @@
-from quaternion_unity.main import add
+from quaternion_unity._main import add  # noqa: PLC2701
 
 
 def test_add():
