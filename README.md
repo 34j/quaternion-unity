@@ -44,6 +44,11 @@ Unity-like and NumPy-compatible quaternion
 
 Install this via pip (or your favourite package manager):
 
-```shell
-pip install quaternion-unity
-```
+`pip install quaternion-unity`
+
+## Credits
+
+This package was created with
+[Copier](https://copier.readthedocs.io/) and the
+[browniebroke/pypackage-template](https://github.com/browniebroke/pypackage-template)
+project template.
